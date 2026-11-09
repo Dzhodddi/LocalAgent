@@ -14,24 +14,35 @@ from localagents.workspace import Workspace
 DENYLIST = ("sudo", "rm -rf /", "| sh", "| bash", "mkfs", "shutdown")
 
 
-def sandbox_args(ws: Workspace) -> list[str]:
-    """bubblewrap prefix: read-only system, writable workspace and /tmp, no network."""
+def sandbox_args(ws: Workspace, extra_ro: tuple[Path, ...] = ()) -> list[str]:
+    """bubblewrap prefix: read-only system, writable workspace and /tmp, no network.
+
+    Your home folder is hidden (an empty tmpfs), so commands cannot read ~/.ssh, tokens or
+    other projects; only the Python install and `extra_ro` paths are put back, read-only.
+    That matters once the agent can push: anything it can read, it could commit.
+    """
     bwrap = shutil.which("bwrap")
     if not bwrap:
         raise ToolError("bubblewrap (bwrap) is not installed, so commands cannot be sandboxed.")
     root = str(ws.root)
-    return [
+    args = [
         bwrap,
         "--ro-bind", "/", "/",
         "--dev", "/dev",
         "--proc", "/proc",
         "--tmpfs", "/tmp",
+        "--tmpfs", str(Path.home()),
+    ]  # fmt: skip
+    for path in (Path(sys.prefix), Path(sys.base_prefix), *extra_ro):
+        args += ["--ro-bind", str(path), str(path)]
+    args += [
         "--bind", root, root,
         "--chdir", root,
         "--unshare-all",
         "--die-with-parent",
         "--new-session",
     ]  # fmt: skip
+    return args
 
 
 def command_env(ws: Workspace) -> dict[str, str]:

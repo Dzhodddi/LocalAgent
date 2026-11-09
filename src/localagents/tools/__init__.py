@@ -197,7 +197,11 @@ def build_tools(workspace: Workspace, settings: Settings) -> dict[str, Tool]:
         ),
     ]
     if git.is_repo(workspace):
-        tools += _git_tools(workspace, settings)
+        if settings.git_backend == "native":
+            tools += _git_tools(workspace, settings)
+        else:
+            raise ValueError(f"Unknown git_backend {settings.git_backend!r}")
+        tools += _remote_tools(workspace, settings)
     tools += [
         Tool(
             name="finish",
@@ -300,3 +304,51 @@ def _git_tools(workspace: Workspace, settings: Settings) -> list[Tool]:
             func=bound(git.git_create_branch),
         ),
     ]
+
+
+def _remote_tools(workspace: Workspace, settings: Settings) -> list[Tool]:
+    """git_push when there is an origin remote; create_pull_request when it is on GitHub and gh is installed.
+
+    The remote is read here, at the start of a run, and pinned: changing `origin` later has no effect.
+    """
+    from localagents.tools import remote as remote_mod
+
+    remote = remote_mod.pinned_remote(workspace)
+    if remote is None:
+        return []
+    protected = ", ".join(settings.protected_branches)
+    tools = [
+        Tool(
+            name="git_push",
+            description=(
+                f"Push a branch to the `{remote.name}` remote (creating it there if needed). Default: the "
+                f"current branch. Pushing to {protected} is not allowed and there is no force push: "
+                "work on a feature branch and commit before pushing."
+            ),
+            parameters=_schema(
+                {"branch": {"type": "string", "description": "Branch to push. Default: the current branch."}},
+                [],
+            ),
+            func=partial(remote_mod.git_push, workspace, settings, remote),
+        )
+    ]
+    if remote.github_repo and remote_mod.gh_available():
+        tools.append(
+            Tool(
+                name="create_pull_request",
+                description=(
+                    f"Open a GitHub pull request on {remote.github_repo} from the current branch. Push the "
+                    "branch with git_push first. Returns the pull request URL."
+                ),
+                parameters=_schema(
+                    {
+                        "title": {"type": "string", "description": "Short title."},
+                        "body": {"type": "string", "description": "What changed and how it was tested."},
+                        "base": {"type": "string", "description": "Branch to merge into. Default: main."},
+                    },
+                    ["title"],
+                ),
+                func=partial(remote_mod.create_pull_request, workspace, settings, remote),
+            )
+        )
+    return tools

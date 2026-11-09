@@ -11,7 +11,9 @@ Usage: uv run python evals/runner.py [--model M] [--repeats N] [--task NAME] [--
 
 import argparse
 import dataclasses
+import fnmatch
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -22,7 +24,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 from localagents.agent import run_agent
-from localagents.config import THINK_CHOICES, Settings, parse_think
+from localagents.config import GIT_BACKENDS, THINK_CHOICES, Settings, parse_think
 from localagents.llm import ChatModel, OllamaModel, Usage
 from localagents.workspace import Workspace, changes
 
@@ -51,14 +53,29 @@ def tampered_tests(original: Path, work: Path, diff: dict[str, list[str]]) -> li
     ]
 
 
-def grade(work: Path, task_dir: Path) -> tuple[bool, str]:
-    """Run visible + hidden tests on the agent's result. Returns (passed, pytest tail)."""
+def setup_task(task_dir: Path, work: Path, remote: Path) -> None:
+    """Copy the starting code; for git tasks, setup.sh then builds history and a bare `origin` at `remote`."""
+    shutil.copytree(task_dir / "repo", work)
+    script = task_dir / "setup.sh"
+    if script.exists():
+        subprocess.run(
+            ["bash", str(script)], cwd=work, env=os.environ | {"EVAL_REMOTE": str(remote)},
+            check=True, capture_output=True, text=True, timeout=60,
+        )  # fmt: skip
+
+
+def grade(work: Path, task_dir: Path, remote: Path | None = None) -> tuple[bool, str]:
+    """Run visible + hidden tests on the agent's result. Returns (passed, pytest tail).
+
+    Hidden tests of git tasks find the bare remote through EVAL_REMOTE.
+    """
     hidden = work / "hidden_tests"
     shutil.copytree(task_dir / "hidden_tests", hidden)
+    env = os.environ | ({"EVAL_REMOTE": str(remote)} if remote else {})
     try:
         proc = subprocess.run(
             [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", "--timeout=30"],
-            check=False, cwd=work, capture_output=True, text=True, timeout=GRADE_TIMEOUT,
+            check=False, cwd=work, env=env, capture_output=True, text=True, timeout=GRADE_TIMEOUT,
         )  # fmt: skip
         output, passed = proc.stdout + proc.stderr, proc.returncode == 0
     except subprocess.TimeoutExpired:
@@ -68,8 +85,8 @@ def grade(work: Path, task_dir: Path) -> tuple[bool, str]:
 
 def run_task(task_dir: Path, model: ChatModel, settings: Settings, log_path: Path) -> dict:
     with tempfile.TemporaryDirectory(prefix=f"eval-{task_dir.name}-") as tmp:
-        work = Path(tmp) / "repo"
-        shutil.copytree(task_dir / "repo", work)
+        work, remote = Path(tmp) / "repo", Path(tmp) / "origin.git"
+        setup_task(task_dir, work, remote)
         ws = Workspace(work)
         before = ws.snapshot()
 
@@ -81,7 +98,7 @@ def run_task(task_dir: Path, model: ChatModel, settings: Settings, log_path: Pat
         for rel in tampered:
             shutil.copy2(task_dir / "repo" / rel, work / rel)
 
-        passed, tail = grade(work, task_dir)
+        passed, tail = grade(work, task_dir, remote if remote.exists() else None)
         return {
             "task": task_dir.name,
             "passed": passed and not tampered,
@@ -150,7 +167,10 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Run LocalAgents evals.")
     parser.add_argument("--model", help=f"Ollama model. Default: {Settings().model}.")
     parser.add_argument("--repeats", type=int, default=1, help="Runs per task (results vary between runs).")
-    parser.add_argument("--task", action="append", help="Only run this task (repeatable).")
+    parser.add_argument(
+        "--task", action="append", help="Only run tasks matching this name or glob, e.g. 'git-*'."
+    )
+    parser.add_argument("--git-backend", choices=GIT_BACKENDS, help="Which git tools the model gets.")
     parser.add_argument("--max-steps", type=int)
     parser.add_argument(
         "--num-ctx", type=int, help=f"Context window in tokens. Default: {Settings().num_ctx}."
@@ -167,24 +187,26 @@ def main() -> None:
         "max_steps": args.max_steps,
         "num_ctx": args.num_ctx,
         "think": parse_think(args.think),
+        "git_backend": args.git_backend,
     }
     settings = dataclasses.replace(Settings(), **{k: v for k, v in overrides.items() if v is not None})
     model = OllamaModel(settings)
 
     task_dirs = sorted(d for d in TASKS.iterdir() if (d / "task.md").exists())
     if args.task:
-        task_dirs = [d for d in task_dirs if d.name in args.task]
+        task_dirs = [d for d in task_dirs if any(fnmatch.fnmatch(d.name, pattern) for pattern in args.task)]
         if not task_dirs:
             sys.exit(f"No such task. Available: {', '.join(d.name for d in sorted(TASKS.iterdir()))}")
 
     label = settings.model.replace(":", "_").replace("/", "_") + (
         f"-think-{args.think}" if args.think else ""
     )
+    label += f"-git-{settings.git_backend}" if args.git_backend else ""
     out = RESULTS / f"{time.strftime('%Y%m%d-%H%M%S')}-{label}"
     out.mkdir(parents=True)
     work = [(task_dir, run) for task_dir in task_dirs for run in range(1, args.repeats + 1)]
     print(
-        f"{len(work)} runs, {args.jobs} at a time, model {settings.model}, num_ctx {settings.num_ctx}, think {settings.think}",
+        f"{len(work)} runs, {args.jobs} at a time, model {settings.model}, num_ctx {settings.num_ctx}, think {settings.think}, git {settings.git_backend}",
         flush=True,
     )
 

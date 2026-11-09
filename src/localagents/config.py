@@ -21,9 +21,12 @@ class Settings:
     # Reasoning before each reply: None = model default, True/False (e.g. qwen3), or a level
     # "low"/"medium"/"high" (gpt-oss, which cannot turn it off).
     think: bool | str | None = None
+    git_backend: str = "native"  # which git tools the model gets; see tools.build_tools
+    protected_branches: tuple[str, ...] = ("main", "master")  # git_push refuses these
 
 
 THINK_CHOICES = ("on", "off", "low", "medium", "high")
+GIT_BACKENDS = ("native",)  # git tool sets the model can be given
 
 
 def parse_think(value: str | None) -> bool | str | None:

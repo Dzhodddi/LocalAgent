@@ -1,5 +1,6 @@
 """Every eval task must be well formed and must fail before the agent touches it."""
 
+import os
 import shutil
 import subprocess
 import sys
@@ -20,11 +21,14 @@ def test_task_layout(task):
 
 @pytest.mark.parametrize("task", TASK_DIRS, ids=lambda d: d.name)
 def test_task_fails_before_any_change(task, tmp_path):
-    work = tmp_path / "repo"
-    shutil.copytree(task / "repo", work)
+    from evals.runner import setup_task
+
+    work, remote = tmp_path / "repo", tmp_path / "origin.git"
+    setup_task(task, work, remote)
     shutil.copytree(task / "hidden_tests", work / "hidden_tests")
     proc = subprocess.run(
         [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider"],
+        env=os.environ | {"EVAL_REMOTE": str(remote)},
         check=False,
         cwd=work,
         capture_output=True,
