@@ -1,0 +1,34 @@
+[project]
+name = "localagents"
+version = "0.1.0"
+description = "Local coding agents powered by Ollama models, with evals"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "mcp>=2.3.0",
+    "ollama>=0.6.3",
+]
+
+[project.scripts]
+localagents = "localagents.cli:main"
+localagents-mcp = "localagents.mcp_server:main"
+
+[build-system]
+requires = ["uv_build>=0.9.28,<0.10.0"]
+build-backend = "uv_build"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["ollama: needs a running Ollama server"]
+timeout = 60
+
+[tool.ruff]
+line-length = 110
+extend-exclude = ["evals/tasks"]  # task repos contain bugs on purpose
+
+[dependency-groups]
+dev = [
+    "pytest>=9.2.0",
+    "pytest-timeout>=2.4.0",
+    "ruff>=0.17.4",
+]
