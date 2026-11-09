@@ -23,6 +23,10 @@ class Settings:
     think: bool | str | None = None
     git_backend: str = "native"  # which git tools the model gets; see tools.build_tools
     protected_branches: tuple[str, ...] = ("main", "master")  # git_push refuses these
+    # Trailer added to every agent commit ({model} is filled in); "" turns it off.
+    commit_trailer: str = os.environ.get(
+        "LOCALAGENTS_COMMIT_TRAILER", "Generated-by: local LLM {model} via LocalAgents"
+    )
 
 
 THINK_CHOICES = ("on", "off", "low", "medium", "high")

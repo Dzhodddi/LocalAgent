@@ -127,7 +127,10 @@ def git_commit(ws: Workspace, settings: Settings, message: str, paths: list[str]
         raise ToolError("Commit message is empty.")
     targets = _paths(ws, paths)
     _run(ws, settings, "add", "--all", "--", *(targets or ["."]))
-    code, out = _git(ws, settings, "commit", "--message", message.strip())
+    trailer = settings.commit_trailer.format(model=settings.model)
+    code, out = _git(
+        ws, settings, "commit", "--message", message.strip(), *(["--trailer", trailer] if trailer else [])
+    )
     if code != 0:
         if "nothing to commit" in out or "no changes added" in out:
             raise ToolError("Nothing to commit: there are no changes in those paths.")

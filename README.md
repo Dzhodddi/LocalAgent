@@ -68,7 +68,9 @@ This adds a `run_local_agent(task, workdir)` tool. `workdir` must be an absolute
 - Git commands run inside the same sandbox. The agent can edit `.git/config` from the shell, and
   settings such as `core.fsmonitor` execute commands, so git never gets more access than the agent.
   There is no pull, reset or rebase. Agent commits are authored by `LocalAgents (<model>)`,
-  with you as the committer.
+  with you as the committer, and their messages end with a
+  `Generated-by: local LLM <model> via LocalAgents` trailer (change it with
+  `LOCALAGENTS_COMMIT_TRAILER`, using `{model}` for the model name; set it empty to turn it off).
 - `git_push` never runs git on the agent's `.git`: the branch is bundled inside the sandbox and
   pushed from a clean temporary repository, to the remote URL read when the run started.
   Protected branches (`main`, `master`) and force pushes are refused.
