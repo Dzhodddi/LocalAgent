@@ -1,0 +1,110 @@
+<title>LocalAgents Eval Stats</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;600;700&display=swap">
+<style>
+/* Layout: one reading column; wide tables scroll inside their own frame. */
+:root {
+  --bg: #f6f7f9; --surface: #ffffff; --fg: #1b2230; --muted: #5d6676; --line: #dde1e8;
+  --accent: #2f5d8a; --pass: #2f7d4f; --pass-bg: #e3f2e8; --fail: #b4403a; --fail-bg: #f8e4e2;
+  --mixed: #9a6a12; --mixed-bg: #f6ecd6; --track: #e8ebf0;
+  --sans: "IBM Plex Sans", system-ui, sans-serif; --mono: "IBM Plex Mono", ui-monospace, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #12161d; --surface: #1a2029; --fg: #e4e8ee; --muted: #98a2b2; --line: #2c3440;
+  --accent: #7fb0e0; --pass: #6cc58f; --pass-bg: #1c3527; --fail: #ec8a83; --fail-bg: #3d2120;
+  --mixed: #e2b45a; --mixed-bg: #3a2f17; --track: #262d38; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #12161d; --surface: #1a2029; --fg: #e4e8ee; --muted: #98a2b2; --line: #2c3440;
+  --accent: #7fb0e0; --pass: #6cc58f; --pass-bg: #1c3527; --fail: #ec8a83; --fail-bg: #3d2120;
+  --mixed: #e2b45a; --mixed-bg: #3a2f17; --track: #262d38; color-scheme: dark }
+body { background: var(--bg); color: var(--fg); font: 15px/1.55 var(--sans); }
+main { max-width: 1040px; margin: 0 auto; padding-block: 40px 64px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: grid; gap: 40px; }
+h1 { font-size: 30px; line-height: 1.2; margin: 0; text-wrap: balance; letter-spacing: -0.01em; }
+h2 { font-size: 19px; margin: 0; text-wrap: balance; }
+p { margin: 0; max-width: 68ch; }
+.lede { color: var(--muted); }
+.eyebrow { font: 600 12px/1 var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--accent); }
+section { display: grid; gap: 14px; min-width: 0; }
+.frame { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; }
+table { border-collapse: collapse; width: 100%; font-size: 14px; }
+th, td { padding: 9px 12px; text-align: left; border-bottom: 1px solid var(--line); vertical-align: middle; }
+tr:last-child td { border-bottom: 0; }
+th { font: 600 12px/1.3 var(--mono); color: var(--muted); letter-spacing: .04em; white-space: nowrap; }
+td.num, th.num { text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.run { font-family: var(--mono); font-size: 12px; color: var(--muted); white-space: nowrap; }
+.cfg { white-space: nowrap; }
+.note { color: var(--muted); font-size: 13px; min-width: 220px; }
+.ci { position: relative; width: 200px; height: 18px; }
+.ci .track { position: absolute; inset: 8px 0; background: var(--track); border-radius: 1px; }
+.ci .band { position: absolute; top: 4px; height: 10px; background: color-mix(in srgb, var(--accent) 30%, transparent); border-radius: 2px; }
+.ci .dot { position: absolute; top: 2px; width: 3px; height: 14px; margin-left: -1px; background: var(--accent); }
+.scale { display: flex; justify-content: space-between; width: 200px; font: 11px var(--mono); color: var(--muted); }
+.pill { display: inline-block; padding: 2px 9px; border-radius: 999px; font: 600 12px/1.5 var(--mono); white-space: nowrap; }
+.pill.real { background: var(--pass-bg); color: var(--pass); }
+.pill.luck { background: var(--mixed-bg); color: var(--mixed); }
+.cell { display: inline-block; min-width: 44px; padding: 2px 6px; border-radius: 3px; text-align: center;
+  font: 12px/1.5 var(--mono); font-variant-numeric: tabular-nums; }
+.cell.pass { background: var(--pass-bg); color: var(--pass); }
+.cell.fail { background: var(--fail-bg); color: var(--fail); }
+.cell.mixed { background: var(--mixed-bg); color: var(--mixed); font-weight: 600; }
+.matrix th.col { writing-mode: vertical-rl; transform: rotate(180deg); white-space: nowrap; font-weight: 500; padding: 10px 6px; }
+.matrix td { text-align: center; padding: 6px; }
+.matrix td.task { text-align: left; font-family: var(--mono); font-size: 13px; white-space: nowrap; }
+.legend { display: flex; flex-wrap: wrap; gap: 14px; color: var(--muted); font-size: 13px; align-items: center; }
+.method { color: var(--muted); font-size: 13px; display: grid; gap: 6px; }
+</style>
+<main>
+<header style="display:grid;gap:10px">
+  <div class="eyebrow">LocalAgents · local Ollama coding agent</div>
+  <h1>Eval stats: which differences are real</h1>
+  <p class="lede">12 eval runs, 155 task attempts, Nov 08 – Nov 10 2026.
+  Each pass rate has a 95% interval, and each change is tested against luck.
+  0 of 10 compared changes are clear enough to call real; the rest need more runs.</p>
+</header>
+
+<section>
+  <h2>Pass rate with its error range</h2>
+  <p class="lede">The bar shows the pass rate (line) and the range the true rate most likely sits in (band).
+  With 9 or 10 attempts the band is wide: a 100% run is consistent with a true rate near 70%.</p>
+  <div class="frame"><table>
+    <tr><th>Run</th><th>Config</th><th class="num">Tasks</th><th class="num">Passed</th><th class="num">Rate</th>
+    <th class="num">95% interval</th><th><div class="scale"><span>0%</span><span>50%</span><span>100%</span></div></th>
+    <th class="num">Avg time</th><th>Note</th></tr>
+    <tr><td class='run'>Nov 08 23:20</td><td class='cfg'>gpt-oss:20b</td><td class='num'>5</td><td class='num'>5/5</td><td class='num'>100%</td><td class='num'>57%–100%</td><td><div class="ci" role="img" aria-label="100%, 95% interval 57% to 100%"><div class="track"></div><div class="band" style="left:56.6%;width:43.4%"></div><div class="dot" style="left:100.0%"></div></div></td><td class='num'>138s</td><td class='note'>First run, 64k context</td></tr><tr><td class='run'>Nov 08 23:41</td><td class='cfg'>gpt-oss:20b</td><td class='num'>5</td><td class='num'>4/5</td><td class='num'>80%</td><td class='num'>38%–96%</td><td><div class="ci" role="img" aria-label="80%, 95% interval 38% to 96%"><div class="track"></div><div class="band" style="left:37.6%;width:58.8%"></div><div class="dot" style="left:80.0%"></div></div></td><td class='num'>105s</td><td class='note'>One job at a time</td></tr><tr><td class='run'>Nov 08 23:50</td><td class='cfg'>gpt-oss:20b</td><td class='num'>5</td><td class='num'>5/5</td><td class='num'>100%</td><td class='num'>57%–100%</td><td><div class="ci" role="img" aria-label="100%, 95% interval 57% to 100%"><div class="track"></div><div class="band" style="left:56.6%;width:43.4%"></div><div class="dot" style="left:100.0%"></div></div></td><td class='num'>369s</td><td class='note'>5 jobs in parallel</td></tr><tr><td class='run'>Nov 09 00:07</td><td class='cfg'>gpt-oss:20b</td><td class='num'>5</td><td class='num'>3/5</td><td class='num'>60%</td><td class='num'>23%–88%</td><td><div class="ci" role="img" aria-label="60%, 95% interval 23% to 88%"><div class="track"></div><div class="band" style="left:23.1%;width:65.2%"></div><div class="dot" style="left:60.0%"></div></div></td><td class='num'>193s</td><td class='note'>4 jobs in parallel</td></tr><tr><td class='run'>Nov 09 20:19</td><td class='cfg'>gpt-oss:20b</td><td class='num'>5</td><td class='num'>6/10</td><td class='num'>60%</td><td class='num'>31%–83%</td><td><div class="ci" role="img" aria-label="60%, 95% interval 31% to 83%"><div class="track"></div><div class="band" style="left:31.3%;width:51.9%"></div><div class="dot" style="left:60.0%"></div></div></td><td class='num'>259s</td><td class='note'>Before edit_file showed a diff; agents sometimes replaced tests</td></tr><tr><td class='run'>Nov 09 21:10</td><td class='cfg'>gpt-oss:20b</td><td class='num'>5</td><td class='num'>9/10</td><td class='num'>90%</td><td class='num'>60%–98%</td><td><div class="ci" role="img" aria-label="90%, 95% interval 60% to 98%"><div class="track"></div><div class="band" style="left:59.6%;width:38.6%"></div><div class="dot" style="left:90.0%"></div></div></td><td class='num'>234s</td><td class='note'>edit_file shows the diff and warns when code is removed</td></tr><tr><td class='run'>Nov 09 22:19</td><td class='cfg'>qwen3:8b · think False</td><td class='num'>5</td><td class='num'>5/10</td><td class='num'>50%</td><td class='num'>24%–76%</td><td><div class="ci" role="img" aria-label="50%, 95% interval 24% to 76%"><div class="track"></div><div class="band" style="left:23.7%;width:52.7%"></div><div class="dot" style="left:50.0%"></div></div></td><td class='num'>545s</td><td class='note'>qwen3:8b with thinking off</td></tr><tr><td class='run'>Nov 09 23:25</td><td class='cfg'>gpt-oss:20b · git native</td><td class='num'>3</td><td class='num'>9/9</td><td class='num'>100%</td><td class='num'>70%–100%</td><td><div class="ci" role="img" aria-label="100%, 95% interval 70% to 100%"><div class="track"></div><div class="band" style="left:70.1%;width:29.9%"></div><div class="dot" style="left:100.0%"></div></div></td><td class='num'>146s</td><td class='note'>Own git tools</td></tr><tr><td class='run'>Nov 09 23:33</td><td class='cfg'>gpt-oss:20b · git mcp</td><td class='num'>3</td><td class='num'>5/9</td><td class='num'>56%</td><td class='num'>27%–81%</td><td><div class="ci" role="img" aria-label="56%, 95% interval 27% to 81%"><div class="track"></div><div class="band" style="left:26.7%;width:54.5%"></div><div class="dot" style="left:55.6%"></div></div></td><td class='num'>162s</td><td class='note'>Official git MCP server</td></tr><tr><td class='run'>Nov 09 23:41</td><td class='cfg'>gpt-oss:20b · git shell</td><td class='num'>3</td><td class='num'>8/9</td><td class='num'>89%</td><td class='num'>56%–98%</td><td><div class="ci" role="img" aria-label="89%, 95% interval 56% to 98%"><div class="track"></div><div class="band" style="left:56.5%;width:41.5%"></div><div class="dot" style="left:88.9%"></div></div></td><td class='num'>179s</td><td class='note'>git and gh through the shell</td></tr><tr><td class='run'>Nov 10 21:33</td><td class='cfg'>gpt-oss:20b · git native · checks on</td><td class='num'>13</td><td class='num'>36/39</td><td class='num'>92%</td><td class='num'>80%–97%</td><td><div class="ci" role="img" aria-label="92%, 95% interval 80% to 97%"><div class="track"></div><div class="band" style="left:79.7%;width:17.7%"></div><div class="dot" style="left:92.3%"></div></div></td><td class='num'>281s</td><td class='note'>13 tasks; 1 fail was a grader bug, fixed later</td></tr><tr><td class='run'>Nov 10 22:37</td><td class='cfg'>gpt-oss:20b · git native · checks off</td><td class='num'>13</td><td class='num'>35/39</td><td class='num'>90%</td><td class='num'>76%–96%</td><td><div class="ci" role="img" aria-label="90%, 95% interval 76% to 96%"><div class="track"></div><div class="band" style="left:76.4%;width:19.5%"></div><div class="dot" style="left:89.7%"></div></div></td><td class='num'>240s</td><td class='note'>13 tasks; 1 fail was a grader bug, fixed later</td></tr>
+  </table></div>
+</section>
+
+<section>
+  <h2>Real improvement or luck?</h2>
+  <p class="lede">Each run is compared with the previous run on the same tasks, plus the experiments below.
+  The p-value is the chance of seeing a gap at least this big if both setups were equally good.
+  "Runs needed" is how many attempts per side would show the observed gap 80% of the time.</p>
+  <div class="frame"><table>
+    <tr><th>Before</th><th>After</th><th class="num">Passed</th><th class="num">p</th><th>Verdict</th>
+    <th class="num">Runs needed</th><th>Why compared</th></tr>
+    <tr><td class='cfg'>gpt-oss:20b<div class='run'>Nov 08 23:20</div></td><td class='cfg'>gpt-oss:20b<div class='run'>Nov 08 23:41</div></td><td class='num'>5/5 → 4/5</td><td class='num'>1.00</td><td><span class='pill luck'>could be luck</span></td><td class='num'>~32</td><td class='note'>previous run on the same tasks</td></tr><tr><td class='cfg'>gpt-oss:20b<div class='run'>Nov 08 23:41</div></td><td class='cfg'>gpt-oss:20b<div class='run'>Nov 08 23:50</div></td><td class='num'>4/5 → 5/5</td><td class='num'>1.00</td><td><span class='pill luck'>could be luck</span></td><td class='num'>~32</td><td class='note'>1 job vs 5 parallel jobs</td></tr><tr><td class='cfg'>gpt-oss:20b<div class='run'>Nov 08 23:50</div></td><td class='cfg'>gpt-oss:20b<div class='run'>Nov 09 00:07</div></td><td class='num'>5/5 → 3/5</td><td class='num'>0.44</td><td><span class='pill luck'>could be luck</span></td><td class='num'>~12</td><td class='note'>previous run on the same tasks</td></tr><tr><td class='cfg'>gpt-oss:20b<div class='run'>Nov 09 00:07</div></td><td class='cfg'>gpt-oss:20b<div class='run'>Nov 09 20:19</div></td><td class='num'>3/5 → 6/10</td><td class='num'>1.00</td><td><span class='pill luck'>could be luck</span></td><td class='num'>—</td><td class='note'>previous run on the same tasks</td></tr><tr><td class='cfg'>gpt-oss:20b<div class='run'>Nov 09 20:19</div></td><td class='cfg'>gpt-oss:20b<div class='run'>Nov 09 21:10</div></td><td class='num'>6/10 → 9/10</td><td class='num'>0.30</td><td><span class='pill luck'>could be luck</span></td><td class='num'>~29</td><td class='note'>diff and removal warning in edit_file</td></tr><tr><td class='cfg'>gpt-oss:20b<div class='run'>Nov 09 21:10</div></td><td class='cfg'>qwen3:8b · think False<div class='run'>Nov 09 22:19</div></td><td class='num'>9/10 → 5/10</td><td class='num'>0.14</td><td><span class='pill luck'>could be luck</span></td><td class='num'>~17</td><td class='note'>gpt-oss:20b vs qwen3:8b</td></tr><tr><td class='cfg'>gpt-oss:20b · git native<div class='run'>Nov 09 23:25</div></td><td class='cfg'>gpt-oss:20b · git mcp<div class='run'>Nov 09 23:33</div></td><td class='num'>9/9 → 5/9</td><td class='num'>0.08</td><td><span class='pill luck'>could be luck</span></td><td class='num'>~10</td><td class='note'>git backend: own tools vs MCP</td></tr><tr><td class='cfg'>gpt-oss:20b · git mcp<div class='run'>Nov 09 23:33</div></td><td class='cfg'>gpt-oss:20b · git shell<div class='run'>Nov 09 23:41</div></td><td class='num'>5/9 → 8/9</td><td class='num'>0.29</td><td><span class='pill luck'>could be luck</span></td><td class='num'>~25</td><td class='note'>git backend: MCP vs shell</td></tr><tr><td class='cfg'>gpt-oss:20b · git native · checks on<div class='run'>Nov 10 21:33</div></td><td class='cfg'>gpt-oss:20b · git native · checks off<div class='run'>Nov 10 22:37</div></td><td class='num'>36/39 → 35/39</td><td class='num'>1.00</td><td><span class='pill luck'>could be luck</span></td><td class='num'>~1,945</td><td class='note'>done checks on vs off</td></tr><tr><td class='cfg'>gpt-oss:20b · git native<div class='run'>Nov 09 23:25</div></td><td class='cfg'>gpt-oss:20b · git shell<div class='run'>Nov 09 23:41</div></td><td class='num'>9/9 → 8/9</td><td class='num'>1.00</td><td><span class='pill luck'>could be luck</span></td><td class='num'>~63</td><td class='note'>git backend: own tools vs shell</td></tr>
+  </table></div>
+</section>
+
+<section>
+  <h2>Task stability</h2>
+  <p class="lede">Passes per task in each run. Amber cells mixed pass and fail within one run; the last column
+  counts all gpt-oss:20b runs for tasks that flipped.</p>
+  <div class="legend"><span class="cell pass">3/3</span> always passed <span class="cell mixed">2/3</span> flipped
+  <span class="cell fail">0/3</span> always failed</div>
+  <div class="frame"><table class="matrix">
+    <tr><th>Task</th><th class='col'>Nov 08 23:20 · gpt-oss:20b</th><th class='col'>Nov 08 23:41 · gpt-oss:20b</th><th class='col'>Nov 08 23:50 · gpt-oss:20b</th><th class='col'>Nov 09 00:07 · gpt-oss:20b</th><th class='col'>Nov 09 20:19 · gpt-oss:20b</th><th class='col'>Nov 09 21:10 · gpt-oss:20b</th><th class='col'>Nov 09 22:19 · qwen3:8b · think False</th><th class='col'>Nov 09 23:25 · gpt-oss:20b · git native</th><th class='col'>Nov 09 23:33 · gpt-oss:20b · git mcp</th><th class='col'>Nov 09 23:41 · gpt-oss:20b · git shell</th><th class='col'>Nov 10 21:33 · gpt-oss:20b · git native · checks on</th><th class='col'>Nov 10 22:37 · gpt-oss:20b · git native · checks off</th><th class="col">Flips, all gpt-oss:20b runs</th></tr>
+    <tr><td class='task'>add-stack-peek</td><td><span class="cell pass">1/1</span></td><td><span class="cell pass">1/1</span></td><td><span class="cell pass">1/1</span></td><td><span class="cell pass">1/1</span></td><td><span class="cell mixed">1/2</span></td><td><span class="cell pass">2/2</span></td><td><span class="cell fail">0/2</span></td><td></td><td></td><td></td><td><span class="cell pass">3/3</span></td><td><span class="cell pass">3/3</span></td><td><span class="cell mixed">13/14</span></td></tr><tr><td class='task'>fix-mutable-default</td><td><span class="cell pass">1/1</span></td><td><span class="cell pass">1/1</span></td><td><span class="cell pass">1/1</span></td><td><span class="cell fail">0/1</span></td><td><span class="cell fail">0/2</span></td><td><span class="cell pass">2/2</span></td><td><span class="cell pass">2/2</span></td><td></td><td></td><td></td><td><span class="cell pass">3/3</span></td><td><span class="cell mixed">2/3</span></td><td><span class="cell mixed">10/14</span></td></tr><tr><td class='task'>fix-pagination</td><td><span class="cell pass">1/1</span></td><td><span class="cell pass">1/1</span></td><td><span class="cell pass">1/1</span></td><td><span class="cell pass">1/1</span></td><td><span class="cell pass">2/2</span></td><td><span class="cell pass">2/2</span></td><td><span class="cell fail">0/2</span></td><td></td><td></td><td></td><td><span class="cell pass">3/3</span></td><td><span class="cell pass">3/3</span></td><td></td></tr><tr><td class='task'>fix-traceback</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td><span class="cell mixed">2/3</span></td><td><span class="cell pass">3/3</span></td><td><span class="cell mixed">5/6</span></td></tr><tr><td class='task'>git-feature-discount</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td><span class="cell mixed">2/3</span></td><td><span class="cell mixed">2/3</span></td><td><span class="cell mixed">4/6</span></td></tr><tr><td class='task'>git-find-regression</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td><span class="cell pass">3/3</span></td><td><span class="cell fail">0/3</span></td><td><span class="cell pass">3/3</span></td><td><span class="cell pass">3/3</span></td><td><span class="cell mixed">2/3</span></td><td><span class="cell mixed">11/15</span></td></tr><tr><td class='task'>git-push-fix</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td><span class="cell pass">3/3</span></td><td><span class="cell mixed">2/3</span></td><td><span class="cell pass">3/3</span></td><td><span class="cell pass">3/3</span></td><td><span class="cell pass">3/3</span></td><td><span class="cell mixed">14/15</span></td></tr><tr><td class='task'>git-restore-feature</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td><span class="cell pass">3/3</span></td><td><span class="cell pass">3/3</span></td><td><span class="cell mixed">2/3</span></td><td><span class="cell pass">3/3</span></td><td><span class="cell pass">3/3</span></td><td><span class="cell mixed">14/15</span></td></tr><tr><td class='task'>git-split-commits</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td><span class="cell pass">3/3</span></td><td><span class="cell pass">3/3</span></td><td></td></tr><tr><td class='task'>implement-slugify</td><td><span class="cell pass">1/1</span></td><td><span class="cell pass">1/1</span></td><td><span class="cell pass">1/1</span></td><td><span class="cell pass">1/1</span></td><td><span class="cell pass">2/2</span></td><td><span class="cell pass">2/2</span></td><td><span class="cell mixed">1/2</span></td><td></td><td></td><td></td><td><span class="cell pass">3/3</span></td><td><span class="cell pass">3/3</span></td><td></td></tr><tr><td class='task'>large-file-bug</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td><span class="cell pass">3/3</span></td><td><span class="cell pass">3/3</span></td><td></td></tr><tr><td class='task'>parse-duration</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td><span class="cell pass">3/3</span></td><td><span class="cell pass">3/3</span></td><td></td></tr><tr><td class='task'>rename-across-files</td><td><span class="cell pass">1/1</span></td><td><span class="cell fail">0/1</span></td><td><span class="cell pass">1/1</span></td><td><span class="cell fail">0/1</span></td><td><span class="cell mixed">1/2</span></td><td><span class="cell mixed">1/2</span></td><td><span class="cell pass">2/2</span></td><td></td><td></td><td></td><td><span class="cell mixed">2/3</span></td><td><span class="cell mixed">2/3</span></td><td><span class="cell mixed">8/14</span></td></tr>
+  </table></div>
+</section>
+
+<section class="method">
+  <h2 style="color:var(--fg)">Method</h2>
+  <p>Intervals: Wilson score, 95%. Comparisons: Fisher's exact test, two-sided, on passed and failed attempts.
+  Runs needed: normal approximation, 5% significance, 80% power. Runs on different task sets are never compared.
+  The code changed between runs, so a comparison measures everything that changed, not only the named setting.</p>
+  <p>Generated by <code>evals/stats.py</code> from <code>evals/results/*/results.json</code>.</p>
+</section>
+</main>

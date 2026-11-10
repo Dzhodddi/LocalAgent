@@ -183,6 +183,19 @@ def print_table(rows: list[dict], summary: dict, num_ctx: int) -> None:
     )
 
 
+def code_version() -> str:
+    """Commit the eval ran on, +dirty with uncommitted changes to the agent or tasks."""
+    git = ["git", "-C", str(EVALS.parent)]
+    sha = subprocess.run([*git, "rev-parse", "--short", "HEAD"], capture_output=True, text=True, check=False)
+    dirty = subprocess.run(
+        [*git, "status", "--porcelain", "--", "src", "evals/tasks"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return sha.stdout.strip() + ("+dirty" if dirty.stdout.strip() else "")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run LocalAgents evals.")
     parser.add_argument("--model", help=f"Ollama model. Default: {Settings().model}.")
@@ -255,6 +268,7 @@ def main() -> None:
             {
                 "settings": dataclasses.asdict(settings),
                 "checks": not args.no_checks,
+                "commit": code_version(),
                 "summary": summary,
                 "runs": rows,
             },
