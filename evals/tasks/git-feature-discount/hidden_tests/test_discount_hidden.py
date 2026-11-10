@@ -33,8 +33,11 @@ def test_discount_pushed():
 
 
 def test_new_test_pushed():
-    tests = git("show", "feat/customer-discount:tests/test_order.py", cwd=REMOTE).stdout
-    assert "discount" in tests and "def test_total" in tests
+    """A discount test in any test file on the branch; the original test kept."""
+    files = git("ls-tree", "-r", "--name-only", "feat/customer-discount", "tests", cwd=REMOTE).stdout.split()
+    texts = [git("show", f"feat/customer-discount:{f}", cwd=REMOTE).stdout for f in files]
+    assert any("discount" in t and "def test_" in t for t in texts), files
+    assert any("def test_total" in t for t in texts)
 
 
 def test_main_untouched_on_remote():
