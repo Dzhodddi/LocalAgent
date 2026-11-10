@@ -10,7 +10,9 @@ src/localagents/
   workspace.py     Confines every path to one project folder
   llm.py           ChatModel protocol + OllamaModel
   prompts.py       System prompt
-  agent.py         The loop: model -> tool calls -> results, until finish / step cap
+  agent.py         The loop: model -> tool calls -> results, until finish / step cap;
+                   repeat detector and context compaction
+  checks.py        Done checks (commands, committed, pushed) run when the model calls finish
   tools/
     __init__.py    Tool registry and Ollama tool schemas
     files.py       read_file, write_file, edit_file, list_files
@@ -29,6 +31,11 @@ evals/
     task.md        Prompt the agent sees
     repo/          Starting code
     hidden_tests/  Grading tests, copied in only after the agent finishes
+    setup.sh       Optional: git history and a bare `origin` remote for git tasks
+    checks.json    Optional done checks; default: the visible tests must pass
+  reports/         Written comparisons of eval runs
+scripts/
+  bench_gpu.py     Ollama speed for different GPU layers / context / threads
 ```
 
 ## Setup
@@ -43,10 +50,12 @@ export OLLAMA_CONTEXT_LENGTH=16384
 
 ```bash
 uv run pytest                                             # unit tests (no Ollama needed)
-uv run localagents run "fix the failing test" --workdir ~/some/project
+uv run localagents run "fix the failing test" --workdir ~/some/project --check "python -m pytest -q"
 uv run python evals/runner.py                             # all evals, default model
 uv run python evals/runner.py --model qwen3:8b --repeats 3 --task fix-pagination
 uv run python evals/runner.py --task 'git-*' --git-backend native   # git tasks use local bare remotes
+uv run python evals/runner.py --no-checks                 # let the agent finish without done checks
+uv run python scripts/bench_gpu.py --num-gpu auto,20,24 --num-ctx 8192,16384
 ```
 
 Eval results and per-run JSONL trajectories go to `evals/results/<timestamp>-<model>/`.
@@ -57,7 +66,19 @@ Eval results and per-run JSONL trajectories go to `evals/results/<timestamp>-<mo
 claude mcp add --scope user localagents -- uv run --project /path/to/LocalAgents localagents-mcp
 ```
 
-This adds a `run_local_agent(task, workdir)` tool. `workdir` must be an absolute path.
+This adds a `run_local_agent(task, workdir, check_commands, require_committed, require_pushed)`
+tool. `workdir` must be an absolute path.
+
+## How the agent copes with a small model
+
+- **Done checks.** The caller says how to verify the work (`check_commands`, `--check`,
+  `checks.json`); the checks are added to the task, and `finish` is refused with the failure
+  until they pass. Three refusals end the run as `checks_failed`.
+- **Repeat detector.** The same failing tool call twice gets a hint to re-read and change
+  approach; four times ends the run as `stuck`.
+- **Context compaction.** Past 60% of `num_ctx`, old tool outputs are cut to their first
+  lines and old reasoning is dropped. The system prompt, task and last 6 messages stay whole.
+- `read_file` stops at about 12k characters, so one read cannot fill the context.
 
 ## Safety
 
