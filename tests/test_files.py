@@ -198,3 +198,13 @@ def test_long_diffs_are_cut(ws, monkeypatch):
     msg = write_file(ws, "a.txt", "")
     assert "more diff lines" in msg
     assert len(msg.splitlines()) == 5  # header, 3 diff lines, "... more"
+
+
+def test_read_file_stops_at_char_budget(ws):
+    from localagents.tools.files import MAX_READ_CHARS
+
+    (ws.root / "big.py").write_text("".join(f"value_{i} = {'x' * 60}\n" for i in range(1000)))
+    out = read_file(ws, "big.py")
+    assert len(out) < MAX_READ_CHARS + 200
+    assert out.splitlines()[-1].startswith("... showing lines 1-")
+    assert "of 1000. Use start/end" in out
