@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 
 from localagents.agent import Event, run_agent
+from localagents.checks import Checks
 from localagents.config import THINK_CHOICES, Settings, parse_think
 from localagents.llm import OllamaModel
 from localagents.workspace import Workspace, changes
@@ -55,6 +56,7 @@ def cmd_run(args: argparse.Namespace) -> int:
         task, ws, OllamaModel(settings), settings,
         log_path=Path(args.log) if args.log else None,
         on_event=None if args.quiet else print_event,
+        checks=Checks(tuple(args.check or ()), args.require_committed, args.require_pushed),
     )  # fmt: skip
 
     diff = changes(before, ws.snapshot())
@@ -84,6 +86,14 @@ def main() -> None:
     run.add_argument(
         "--think", choices=THINK_CHOICES, help="Model reasoning before each reply. Default: model default."
     )
+    run.add_argument(
+        "--check", action="append", metavar="CMD",
+        help="Command that must succeed before the agent may finish, e.g. 'python -m pytest -q'. Repeatable.",
+    )  # fmt: skip
+    run.add_argument(
+        "--require-committed", action="store_true", help="Finish only with every change committed."
+    )
+    run.add_argument("--require-pushed", action="store_true", help="Finish only once the branch is pushed.")
     run.add_argument("--log", help="Write the full trajectory to this JSONL file.")
     run.add_argument("--no-sandbox", action="store_true", help="Run commands without bubblewrap.")
     run.add_argument("--quiet", action="store_true", help="Only print the result.")

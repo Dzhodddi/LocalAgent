@@ -180,3 +180,37 @@ def test_usage_is_summed_and_not_sent_back(ws, settings, tmp_path_factory):
     events = [json.loads(line) for line in log.read_text().splitlines()]
     assert events[0]["usage"]["prompt_tokens"] == 500
     assert events[-1]["usage"]["output_tokens"] == 50
+
+
+def test_repeated_failing_call_gets_a_hint_then_stops(ws, settings):
+    from localagents.agent import REPEAT_HINT, REPEAT_STOP_AT
+
+    (ws.root / "a.py").write_text("x = 1\n")
+    bad_edit = call("edit_file", path="a.py", old="x  = 1", new="x = 2")
+    model = FakeModel([bad_edit] * REPEAT_STOP_AT)
+    result = run_agent("t", ws, model, settings)
+    assert REPEAT_HINT not in model.calls[1][-1]["content"]
+    assert REPEAT_HINT in model.calls[2][-1]["content"]
+    assert (result.status, result.steps) == ("stuck", REPEAT_STOP_AT)
+
+
+def test_compaction_trims_old_tool_outputs(ws, settings):
+    import dataclasses
+
+    from localagents.agent import TRIMMED
+    from localagents.llm import USAGE_KEY, Usage
+
+    (ws.root / "big.py").write_text("".join(f"line_{i} = {i}\n" for i in range(300)))
+    settings = dataclasses.replace(settings, num_ctx=1000, compact_at=0.5, keep_recent=2)
+    reads = [call("read_file", path="big.py") for _ in range(3)]
+    reads[0]["thinking"] = "long reasoning " * 50
+    finish = call("finish", summary="done") | {USAGE_KEY: Usage(calls=1, peak_context=900)}
+    model = FakeModel([*reads, finish])
+    result = run_agent("t", ws, model, settings)
+
+    assert result.compactions >= 1
+    first_read, last_read = result.messages[3], result.messages[-1]
+    assert first_read["role"] == "tool" and first_read["content"].endswith(TRIMMED)
+    assert "thinking" not in result.messages[2]
+    assert TRIMMED not in result.messages[-3]["content"]  # recent messages stay whole
+    assert last_read["role"] == "tool"

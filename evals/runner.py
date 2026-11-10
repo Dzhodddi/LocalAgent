@@ -2,7 +2,8 @@
 
 For each task in evals/tasks/<name>/:
   1. copy repo/ into a fresh temp folder
-  2. run the agent on task.md (step cap + time limit)
+  2. run the agent on task.md (step cap + time limit). Like an orchestrator would, the runner
+     tells the agent how to check it is done: checks.json, or by default the visible tests
   3. restore the original test files, copy hidden_tests/ in AFTER the run and run pytest
   4. write results + JSONL trajectories to evals/results/<timestamp>/
 
@@ -24,6 +25,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 from localagents.agent import run_agent
+from localagents.checks import Checks
 from localagents.config import GIT_BACKENDS, THINK_CHOICES, Settings, parse_think
 from localagents.llm import ChatModel, OllamaModel, Usage
 from localagents.workspace import Workspace, changes
@@ -32,6 +34,7 @@ EVALS = Path(__file__).parent
 TASKS = EVALS / "tasks"
 RESULTS = EVALS / "results"
 GRADE_TIMEOUT = 120
+DEFAULT_CHECKS = Checks(commands=("python -m pytest -q",))
 
 
 def is_test_file(rel: str) -> bool:
@@ -64,6 +67,15 @@ def setup_task(task_dir: Path, work: Path, remote: Path) -> None:
         )  # fmt: skip
 
 
+def task_checks(task_dir: Path) -> Checks:
+    """checks.json: {"commands": [...], "committed": bool, "pushed": bool}. Default: run the tests."""
+    file = task_dir / "checks.json"
+    if not file.exists():
+        return DEFAULT_CHECKS
+    spec = json.loads(file.read_text())
+    return Checks(tuple(spec.get("commands", [])), spec.get("committed", False), spec.get("pushed", False))
+
+
 def grade(work: Path, task_dir: Path, remote: Path | None = None) -> tuple[bool, str]:
     """Run visible + hidden tests on the agent's result. Returns (passed, pytest tail).
 
@@ -83,14 +95,19 @@ def grade(work: Path, task_dir: Path, remote: Path | None = None) -> tuple[bool,
     return passed, "\n".join(output.strip().splitlines()[-15:])
 
 
-def run_task(task_dir: Path, model: ChatModel, settings: Settings, log_path: Path) -> dict:
+def run_task(
+    task_dir: Path, model: ChatModel, settings: Settings, log_path: Path, use_checks: bool = True
+) -> dict:
     with tempfile.TemporaryDirectory(prefix=f"eval-{task_dir.name}-") as tmp:
         work, remote = Path(tmp) / "repo", Path(tmp) / "origin.git"
         setup_task(task_dir, work, remote)
         ws = Workspace(work)
         before = ws.snapshot()
 
-        result = run_agent((task_dir / "task.md").read_text(), ws, model, settings, log_path=log_path)
+        checks = task_checks(task_dir) if use_checks else None
+        result = run_agent(
+            (task_dir / "task.md").read_text(), ws, model, settings, log_path=log_path, checks=checks
+        )
         diff = changes(before, ws.snapshot())
 
         # The agent must not pass by removing tests: put those files back before grading.
@@ -107,6 +124,7 @@ def run_task(task_dir: Path, model: ChatModel, settings: Settings, log_path: Pat
             "tool_calls": result.tool_calls,
             "tool_errors": result.tool_errors,
             "seconds": round(result.seconds, 1),
+            "compactions": result.compactions,
             "usage": result.usage.to_dict(),
             "changed": diff,
             "tampered_tests": tampered,
@@ -116,10 +134,12 @@ def run_task(task_dir: Path, model: ChatModel, settings: Settings, log_path: Pat
         }
 
 
-def run_one(task_dir: Path, run: int, model: ChatModel, settings: Settings, out: Path) -> dict:
+def run_one(
+    task_dir: Path, run: int, model: ChatModel, settings: Settings, out: Path, use_checks: bool = True
+) -> dict:
     """run_task, but a crash becomes a failed row instead of stopping the whole eval."""
     try:
-        row = run_task(task_dir, model, settings, out / f"{task_dir.name}-{run}.jsonl")
+        row = run_task(task_dir, model, settings, out / f"{task_dir.name}-{run}.jsonl", use_checks)
     except Exception as e:  # noqa: BLE001 - any crash is recorded as a failed run
         row = {"task": task_dir.name, "passed": False, "status": "crashed", "steps": 0, "tool_calls": 0,
                "tool_errors": 0, "seconds": 0.0, "usage": Usage().to_dict(), "summary": repr(e)}  # fmt: skip
@@ -146,13 +166,13 @@ def summarize(rows: list[dict], wall_seconds: float, jobs: int) -> dict:
 
 
 def print_table(rows: list[dict], summary: dict, num_ctx: int) -> None:
-    header = f"{'task':<22} {'run':>3} {'pass':<4} {'status':<10} {'steps':>5} {'err':>3} {'secs':>6} {'tokens out':>10} {'peak ctx':>8} {'tok/s':>6}"
+    header = f"{'task':<22} {'run':>3} {'pass':<4} {'status':<13} {'steps':>5} {'err':>3} {'secs':>6} {'tokens out':>10} {'peak ctx':>8} {'tok/s':>6}"
     print("\n" + header)
     for r in rows:
         u = r["usage"]
         mark = "yes" if r["passed"] else "NO"
         print(
-            f"{r['task']:<22} {r['run']:>3} {mark:<4} {r['status']:<10} {r['steps']:>5} {r['tool_errors']:>3} "
+            f"{r['task']:<22} {r['run']:>3} {mark:<4} {r['status']:<13} {r['steps']:>5} {r['tool_errors']:>3} "
             f"{r['seconds']:>6} {u['output_tokens']:>10,} {u['peak_context']:>8,} {u['output_tps']:>6}"
         )
     s = summary
@@ -180,6 +200,9 @@ def main() -> None:
         help="Runs in parallel. Only faster if Ollama serves that many at once (OLLAMA_NUM_PARALLEL).",
     )  # fmt: skip
     parser.add_argument("--think", choices=THINK_CHOICES, help="Model reasoning before each reply.")
+    parser.add_argument(
+        "--no-checks", action="store_true", help="Let the agent finish without running the done checks."
+    )
     args = parser.parse_args()
 
     overrides = {
@@ -202,18 +225,22 @@ def main() -> None:
         f"-think-{args.think}" if args.think else ""
     )
     label += f"-git-{settings.git_backend}" if args.git_backend else ""
+    label += "-no-checks" if args.no_checks else ""
     out = RESULTS / f"{time.strftime('%Y%m%d-%H%M%S')}-{label}"
     out.mkdir(parents=True)
     work = [(task_dir, run) for task_dir in task_dirs for run in range(1, args.repeats + 1)]
     print(
-        f"{len(work)} runs, {args.jobs} at a time, model {settings.model}, num_ctx {settings.num_ctx}, think {settings.think}, git {settings.git_backend}",
+        f"{len(work)} runs, {args.jobs} at a time, model {settings.model}, num_ctx {settings.num_ctx}, think {settings.think}, git {settings.git_backend}, checks {not args.no_checks}",
         flush=True,
     )
 
     started = time.monotonic()
     rows = []
     with ThreadPoolExecutor(max_workers=args.jobs) as pool:
-        futures = [pool.submit(run_one, task_dir, run, model, settings, out) for task_dir, run in work]
+        futures = [
+            pool.submit(run_one, task_dir, run, model, settings, out, not args.no_checks)
+            for task_dir, run in work
+        ]
         for future in as_completed(futures):
             row = future.result()
             rows.append(row)
@@ -224,7 +251,15 @@ def main() -> None:
     rows.sort(key=lambda r: (r["task"], r["run"]))
     summary = summarize(rows, time.monotonic() - started, args.jobs)
     (out / "results.json").write_text(
-        json.dumps({"settings": dataclasses.asdict(settings), "summary": summary, "runs": rows}, indent=2)
+        json.dumps(
+            {
+                "settings": dataclasses.asdict(settings),
+                "checks": not args.no_checks,
+                "summary": summary,
+                "runs": rows,
+            },
+            indent=2,
+        )
     )
     print_table(rows, summary, settings.num_ctx)
     print(f"details: {out}")
