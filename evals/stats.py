@@ -52,6 +52,8 @@ class Run:
             parts.append(f"think {s['think']}")
         if s.get("git_backend"):
             parts.append(f"git {s['git_backend']}")
+        if s.get("project_context") is False:
+            parts.append("context off")
         if self.checks is not None:
             parts.append("checks on" if self.checks else "checks off")
         return " · ".join(parts)

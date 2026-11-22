@@ -9,6 +9,7 @@ from typing import Any, Literal
 
 from localagents.checks import Checks, run_checks
 from localagents.config import Settings
+from localagents.context import FolderInstructions, project_instructions
 from localagents.llm import USAGE_KEY, ChatModel, Message, ModelError, Usage
 from localagents.prompts import SYSTEM_PROMPT
 from localagents.tools import ToolError, build_tools
@@ -94,8 +95,10 @@ def run_agent(
     `checks` run when the model calls finish; finish is refused until they pass."""
     tools = build_tools(workspace, settings)
     schemas = [tool.schema() for tool in tools.values()]
+    instructions = project_instructions(workspace) if settings.project_context else None
+    folders = FolderInstructions(workspace) if settings.project_context else None
     messages: list[Message] = [
-        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "system", "content": f"{SYSTEM_PROMPT}\n{instructions}" if instructions else SYSTEM_PROMPT},
         {"role": "user", "content": f"{task.rstrip()}\n\n{checks.describe()}" if checks else task},
     ]
     started = time.monotonic()
@@ -162,6 +165,10 @@ def run_agent(
             except ToolError as e:
                 output, ok = f"Error: {e}", False
                 errors += 1
+            path = arguments.get("path") if isinstance(arguments := function.get("arguments"), dict) else None
+            if folders and isinstance(path, str) and (extra := folders.for_path(path)):
+                output += f"\n\n{extra}"
+                emit({"type": "context", "step": step, "path": path, "chars": len(extra)})
             repeats = 0
             if not ok:
                 key = f"{name} {json.dumps(function.get('arguments'), sort_keys=True, default=str)}"

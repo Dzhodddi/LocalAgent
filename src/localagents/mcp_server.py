@@ -58,8 +58,10 @@ async def run_local_agent(
     """Run a coding agent on a local Ollama model (default gpt-oss:20b) inside `workdir`.
 
     The agent can read, write and edit files, search, run sandboxed shell commands (no network)
-    and use git in that folder only. Good for small, well-specified tasks: fix a bug with a
-    failing test, implement a function, add a test. Give a complete task description.
+    and use git in that folder only. It follows the folder's AGENTS.md (or CLAUDE.md), so put
+    project rules there once instead of repeating them in every task. Good for small,
+    well-specified tasks: fix a bug with a failing test, implement a function, add a test.
+    Give a complete task description.
 
     Always say how to verify the work: the local model is small and may not work it out.
     `check_commands` (e.g. ["python -m pytest -q", "ruff check ."]) must all succeed, and with

@@ -21,6 +21,8 @@ def settings_from(args: argparse.Namespace) -> Settings:
     }
     if args.no_sandbox:
         overrides["sandbox"] = False
+    if args.no_context:
+        overrides["project_context"] = False
     return dataclasses.replace(Settings(), **{k: v for k, v in overrides.items() if v is not None})
 
 
@@ -96,6 +98,7 @@ def main() -> None:
     run.add_argument("--require-pushed", action="store_true", help="Finish only once the branch is pushed.")
     run.add_argument("--log", help="Write the full trajectory to this JSONL file.")
     run.add_argument("--no-sandbox", action="store_true", help="Run commands without bubblewrap.")
+    run.add_argument("--no-context", action="store_true", help="Ignore AGENTS.md / CLAUDE.md files.")
     run.add_argument("--quiet", action="store_true", help="Only print the result.")
 
     args = parser.parse_args()

@@ -21,6 +21,7 @@ class Settings:
     # Reasoning before each reply: None = model default, True/False (e.g. qwen3), or a level
     # "low"/"medium"/"high" (gpt-oss, which cannot turn it off).
     think: bool | str | None = None
+    project_context: bool = True  # read AGENTS.md / CLAUDE.md files; see context.py
     compact_at: float = 0.6  # trim old tool outputs once the context passes this share of num_ctx
     keep_recent: int = 6  # messages at the end that compaction never touches
     git_backend: str = "native"  # which git tools the model gets; see tools.build_tools

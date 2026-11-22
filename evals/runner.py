@@ -214,6 +214,9 @@ def main() -> None:
     )  # fmt: skip
     parser.add_argument("--think", choices=THINK_CHOICES, help="Model reasoning before each reply.")
     parser.add_argument(
+        "--no-context", action="store_true", help="Ignore AGENTS.md / CLAUDE.md in the tasks."
+    )
+    parser.add_argument(
         "--no-checks", action="store_true", help="Let the agent finish without running the done checks."
     )
     args = parser.parse_args()
@@ -226,6 +229,8 @@ def main() -> None:
         "git_backend": args.git_backend,
     }
     settings = dataclasses.replace(Settings(), **{k: v for k, v in overrides.items() if v is not None})
+    if args.no_context:
+        settings = dataclasses.replace(settings, project_context=False)
     model = OllamaModel(settings)
 
     task_dirs = sorted(d for d in TASKS.iterdir() if (d / "task.md").exists())
@@ -239,6 +244,7 @@ def main() -> None:
     )
     label += f"-git-{settings.git_backend}" if args.git_backend else ""
     label += "-no-checks" if args.no_checks else ""
+    label += "-no-context" if args.no_context else ""
     out = RESULTS / f"{time.strftime('%Y%m%d-%H%M%S')}-{label}"
     out.mkdir(parents=True)
     work = [(task_dir, run) for task_dir in task_dirs for run in range(1, args.repeats + 1)]

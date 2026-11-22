@@ -12,6 +12,7 @@ src/localagents/
   prompts.py       System prompt
   agent.py         The loop: model -> tool calls -> results, until finish / step cap;
                    repeat detector and context compaction
+  context.py       Project instructions: AGENTS.md / CLAUDE.md, root and per folder
   checks.py        Done checks (commands, committed, pushed) run when the model calls finish
   tools/
     __init__.py    Tool registry and Ollama tool schemas
@@ -55,6 +56,7 @@ uv run python evals/runner.py                             # all evals, default m
 uv run python evals/runner.py --model qwen3:8b --repeats 3 --task fix-pagination
 uv run python evals/runner.py --task 'git-*' --git-backend native   # git tasks use local bare remotes
 uv run python evals/runner.py --no-checks                 # let the agent finish without done checks
+uv run python evals/runner.py --task 'context-*' --repeats 5 --no-context   # A/B the project instructions
 uv run python scripts/bench_gpu.py --num-gpu auto,20,24 --num-ctx 8192,16384
 ```
 
@@ -68,6 +70,26 @@ claude mcp add --scope user localagents -- uv run --project /path/to/LocalAgents
 
 This adds a `run_local_agent(task, workdir, check_commands, require_committed, require_pushed)`
 tool. `workdir` must be an absolute path.
+
+## Project instructions (AGENTS.md)
+
+Like CLAUDE.md for Claude Code: put `AGENTS.md` (or `CLAUDE.md`) in the project, and the agent
+follows it without you repeating the rules in every task.
+
+- The root file goes into the system prompt, cut at 6,000 characters (~1.5k tokens).
+- A file in a subfolder is added to a tool's output the first time the agent touches a path
+  in that folder (cut at 3,000 characters), so folder rules cost nothing elsewhere.
+- In a folder, `AGENTS.md` wins over `CLAUDE.md`. `--no-context` turns both off.
+
+Write it for a small model: short, imperative, exact commands, no background reading.
+
+```markdown
+# Billing service
+- Tests: `python -m pytest -q`. Lint: `ruff check .`
+- Money is always `decimal.Decimal`, rounded with `ROUND_HALF_UP`.
+- Every change gets a line in CHANGELOG.md under `## Unreleased`.
+- Never edit `migrations/` by hand.
+```
 
 ## How the agent copes with a small model
 
