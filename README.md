@@ -37,7 +37,9 @@ evals/
     setup.sh       Optional: git history and a bare `origin` remote for git tasks
     checks.json    Optional done checks; default: the visible tests must pass
     mcp.json       Optional MCP servers for the task (e.g. fake logs and metrics)
-  reports/         Written comparisons of eval runs
+  reports/         Eval run reports and the stats page (evals/stats.py)
+docs/
+  git-backends.md  Own git tools vs git MCP vs git CLI, measured
 scripts/
   bench_gpu.py     Ollama speed for different GPU layers / context / threads
 ```
