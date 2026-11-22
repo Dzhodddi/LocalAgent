@@ -8,6 +8,7 @@ from localagents.tools import ToolError
 from localagents.workspace import SKIP_DIRS, Workspace
 
 MAX_READ_LINES = 2000
+MAX_READ_CHARS = 12_000  # ~3k tokens: one read must not fill a small model's context
 MAX_LIST_FILES = 500
 MAX_DIFF_LINES = 40
 DEF_RE = re.compile(r"^\s*(?:async\s+)?(?:def|class)\s+(\w+)", re.MULTILINE)
@@ -63,7 +64,15 @@ def read_file(ws: Workspace, path: str, start: int | None = None, end: int | Non
         raise ToolError(f"{path} has only {len(lines)} lines.")
     last = min(last, len(lines), first + MAX_READ_LINES - 1)
 
-    body = "\n".join(f"{n:>5}\t{lines[n - 1]}" for n in range(first, last + 1))
+    shown, size = [], 0
+    for n in range(first, last + 1):
+        line = f"{n:>5}\t{lines[n - 1]}"
+        size += len(line) + 1
+        if shown and size > MAX_READ_CHARS:
+            last = n - 1
+            break
+        shown.append(line)
+    body = "\n".join(shown)
     if last < len(lines):
         body += f"\n... showing lines {first}-{last} of {len(lines)}. Use start/end to read more."
     return body

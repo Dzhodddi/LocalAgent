@@ -1,0 +1,25 @@
+{
+  "notes": {
+    "20261108-232045-gpt-oss_20b": "First run, 64k context",
+    "20261108-234147-gpt-oss_20b": "One job at a time",
+    "20261108-235037-gpt-oss_20b": "5 jobs in parallel",
+    "20261109-000743-gpt-oss_20b": "4 jobs in parallel",
+    "20261109-201916-gpt-oss_20b": "Before edit_file showed a diff; agents sometimes replaced tests",
+    "20261109-211027-gpt-oss_20b": "edit_file shows the diff and warns when code is removed",
+    "20261109-221923-qwen3_8b-think-off": "qwen3:8b with thinking off",
+    "20261109-232514-gpt-oss_20b-git-native": "Own git tools",
+    "20261109-233342-gpt-oss_20b-git-mcp": "Official git MCP server",
+    "20261109-234159-gpt-oss_20b-git-shell": "git and gh through the shell",
+    "20261110-213341-gpt-oss_20b": "13 tasks; 1 fail was a grader bug, fixed later",
+    "20261110-223741-gpt-oss_20b-no-checks": "13 tasks; 1 fail was a grader bug, fixed later"
+  },
+  "comparisons": [
+    ["20261109-201916-gpt-oss_20b", "20261109-211027-gpt-oss_20b", "diff and removal warning in edit_file"],
+    ["20261109-211027-gpt-oss_20b", "20261109-221923-qwen3_8b-think-off", "gpt-oss:20b vs qwen3:8b"],
+    ["20261109-232514-gpt-oss_20b-git-native", "20261109-233342-gpt-oss_20b-git-mcp", "git backend: own tools vs MCP"],
+    ["20261109-233342-gpt-oss_20b-git-mcp", "20261109-234159-gpt-oss_20b-git-shell", "git backend: MCP vs shell"],
+    ["20261109-232514-gpt-oss_20b-git-native", "20261109-234159-gpt-oss_20b-git-shell", "git backend: own tools vs shell"],
+    ["20261110-213341-gpt-oss_20b", "20261110-223741-gpt-oss_20b-no-checks", "done checks on vs off"],
+    ["20261108-234147-gpt-oss_20b", "20261108-235037-gpt-oss_20b", "1 job vs 5 parallel jobs"]
+  ]
+}

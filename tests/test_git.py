@@ -106,6 +106,20 @@ def test_commit_all_with_agent_as_author(repo, settings):
     assert git_status(repo, settings).endswith("Working tree clean.")
 
 
+def test_commit_message_gets_trailer(repo, settings):
+    (repo.root / "app.py").write_text("x = 2\n")
+    git_commit(repo, settings, "Change x")
+    assert sh(repo, "log", "-1", "--format=%B").strip() == (
+        f"Change x\n\nGenerated-by: local LLM {settings.model} via LocalAgents"
+    )
+
+
+def test_commit_trailer_can_be_turned_off(repo, settings):
+    (repo.root / "app.py").write_text("x = 2\n")
+    git_commit(repo, dataclasses.replace(settings, commit_trailer=""), "Change x")
+    assert sh(repo, "log", "-1", "--format=%B").strip() == "Change x"
+
+
 def test_commit_only_given_paths(repo, settings):
     (repo.root / "app.py").write_text("x = 2\n")
     (repo.root / "lib.py").write_text("y = 2\n")

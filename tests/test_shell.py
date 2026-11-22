@@ -72,3 +72,17 @@ def test_sandbox_has_no_network(ws, settings):
         pytest.skip("sandbox only")
     code = "import socket; socket.create_connection(('1.1.1.1', 80), timeout=2)"
     assert not run_command(ws, settings, f'python -c "{code}"').startswith("exit code 0")
+
+
+@needs_bwrap
+def test_sandbox_hides_home(ws, settings):
+    from pathlib import Path
+
+    if not settings.sandbox:
+        pytest.skip("sandbox only")
+    home = Path.home()
+    secrets = [p for p in (home / ".ssh", home / ".gitconfig", home / ".config") if p.exists()]
+    if not secrets:
+        pytest.skip("nothing in home to check")
+    for path in secrets:
+        assert run_command(ws, settings, f"test -e {path}").startswith("exit code 1"), path

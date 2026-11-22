@@ -1,0 +1,13 @@
+set -euo pipefail
+g() { git -c user.name=Setup -c user.email=setup@example.com "$@"; }
+git init -q -b main
+git init -q --bare -b main "$EVAL_REMOTE"
+git remote add origin "$EVAL_REMOTE"
+g add .
+g commit -qm "Add pricing with percentage discounts"
+sed -i 's#discount_pct / 100#discount_pct / 10#' pricing.py
+g commit -qam "Refactor discount calculation"
+printf '# Shop\n\nPricing helpers.\n' > README.md
+g add README.md
+g commit -qm "Add README"
+g push -q origin main

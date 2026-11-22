@@ -1,0 +1,6 @@
+{
+  "commands": [
+    "python -m pytest -q"
+  ],
+  "committed": true
+}

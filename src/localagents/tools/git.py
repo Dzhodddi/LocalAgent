@@ -2,8 +2,8 @@
 
 Git runs inside the same bubblewrap sandbox as run_command: the agent can edit .git/config
 through the shell, and settings such as core.fsmonitor run commands, so git must never run
-with more access than the agent already has. No push, pull, reset or rebase: nothing that
-talks to the network or rewrites history.
+with more access than the agent already has. No pull, reset or rebase: nothing that rewrites
+history. Pushing lives in remote.py, which never runs git on the agent's config.
 """
 
 import functools
@@ -38,9 +38,10 @@ def _host_identity() -> tuple[str, str]:
     return get("user.name") or AGENT_NAME, get("user.email") or AGENT_EMAIL
 
 
-def _git(ws: Workspace, settings: Settings, *args: str) -> tuple[int, str]:
+def git_env(ws: Workspace, settings: Settings) -> dict[str, str]:
+    """Environment for git inside the sandbox (also used by the MCP git server)."""
     name, email = _host_identity()
-    env = command_env(ws) | {
+    return command_env(ws) | {
         "GIT_TERMINAL_PROMPT": "0",
         "GIT_PAGER": "cat",
         "GIT_CONFIG_NOSYSTEM": "1",
@@ -50,6 +51,10 @@ def _git(ws: Workspace, settings: Settings, *args: str) -> tuple[int, str]:
         "GIT_COMMITTER_NAME": name,
         "GIT_COMMITTER_EMAIL": email,
     }
+
+
+def _git(ws: Workspace, settings: Settings, *args: str) -> tuple[int, str]:
+    env = git_env(ws, settings)
     prefix = sandbox_args(ws) if settings.sandbox else []
     try:
         proc = subprocess.run(
@@ -122,7 +127,10 @@ def git_commit(ws: Workspace, settings: Settings, message: str, paths: list[str]
         raise ToolError("Commit message is empty.")
     targets = _paths(ws, paths)
     _run(ws, settings, "add", "--all", "--", *(targets or ["."]))
-    code, out = _git(ws, settings, "commit", "--message", message.strip())
+    trailer = settings.commit_trailer.format(model=settings.model)
+    code, out = _git(
+        ws, settings, "commit", "--message", message.strip(), *(["--trailer", trailer] if trailer else [])
+    )
     if code != 0:
         if "nothing to commit" in out or "no changes added" in out:
             raise ToolError("Nothing to commit: there are no changes in those paths.")
