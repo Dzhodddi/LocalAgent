@@ -37,6 +37,11 @@ evals/
     setup.sh       Optional: git history and a bare `origin` remote for git tasks
     checks.json    Optional done checks; default: the visible tests must pass
     mcp.json       Optional MCP servers for the task (e.g. fake logs and metrics)
+    services-up.sh / services-down.sh
+                   Optional real services for the run (Docker Compose), see below
+  mcp/
+    docker_observability.py
+                   MCP server: Compose services, their logs, Prometheus queries
   reports/         Eval run reports and the stats page (evals/stats.py)
 docs/
   git-backends.md  Own git tools vs git MCP vs git CLI, measured
@@ -63,6 +68,7 @@ uv run python evals/runner.py --task 'git-*' --git-backend native   # git tasks 
 uv run python evals/runner.py --no-checks                 # let the agent finish without done checks
 uv run python evals/runner.py --task 'context-*' --repeats 5 --no-context   # A/B the project instructions
 uv run python evals/runner.py --task 'logs-*' --repeats 5 --no-mcp          # A/B the logs and metrics tools
+uv run python evals/runner.py --task 'docker-*' --repeats 3 --jobs 2        # real Docker incident (needs Docker)
 uv run python scripts/bench_gpu.py --num-gpu auto,20,24 --num-ctx 8192,16384
 ```
 
@@ -121,6 +127,29 @@ so list read-only ones and use a read-only token:
   narrow the query. Descriptions are cut at 400 characters; `descriptions` replaces them.
 - Check the tool names your server offers: if an allowed tool is missing, the run stops with
   the list of tools the server has.
+
+### Real incident eval (Docker)
+
+`docker-orders-incident` runs a real stack per run: the orders API built from the task's
+starting code, a traffic generator replaying production-like requests, and Prometheus. Some
+requests fail; the agent only learns which and why through `docker_observability.py`
+(`list_services`, `service_logs` with tracebacks kept together, `prometheus_query`), fixes
+the code and adds a regression test. `restart_service` exists but is not in the allowlist.
+
+The runner gives every run its own Compose project (`EVAL_RUN_ID`), so parallel runs do not
+mix, runs `services-up.sh` before the agent and `services-down.sh` after it (containers,
+volumes and built images are removed). The first run pulls `python:3.13-slim` and
+`prom/prometheus`; starting the stack takes about 45 s.
+
+The same server works on your own Compose project:
+
+```json
+{"servers": {"docker": {
+  "command": ["python", "/path/to/LocalAgents/evals/mcp/docker_observability.py"],
+  "env": {"COMPOSE_PROJECT": "myapp", "PROMETHEUS_URL": "http://localhost:9090"},
+  "tools": ["list_services", "service_logs", "prometheus_query"]
+}}}
+```
 
 ## How the agent copes with a small model
 

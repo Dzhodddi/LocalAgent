@@ -92,3 +92,11 @@ def test_number_and_object_arrays_are_coerced():
     assert _coerce("t", "f", [{"k": 1}], "array", {"type": "object"}) == [{"k": 1}]
     with pytest.raises(ToolError):
         _coerce("t", "n", "abc", "number")
+
+
+def test_run_variables_win_over_environment(tmp_path, monkeypatch):
+    from localagents.mcp_tools import _expand
+
+    monkeypatch.setenv("EVAL_RUN_ID", "from-env")
+    s = spec(tmp_path, variables={"EVAL_RUN_ID": "run-42"})
+    assert _expand("p=${EVAL_RUN_ID} d=${CONFIG_DIR}", s) == f"p=run-42 d={tmp_path}"

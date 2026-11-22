@@ -47,6 +47,7 @@ class McpServerSpec:
     config_dir: Path
     env: dict[str, str] = field(default_factory=dict)  # values may hold ${VAR}
     descriptions: dict[str, str] = field(default_factory=dict)
+    variables: dict[str, str] = field(default_factory=dict)  # ${NAME} values that win over the environment
 
 
 def default_mcp_servers() -> list[McpServerSpec]:
@@ -86,6 +87,8 @@ def _expand(value: str, spec: McpServerSpec) -> str:
             return str(spec.config_dir)
         if key == "PYTHON":
             return sys.executable
+        if key in spec.variables:
+            return spec.variables[key]
         if key not in os.environ:
             raise ToolError(f"MCP server {spec.name}: environment variable {key} is not set.")
         return os.environ[key]

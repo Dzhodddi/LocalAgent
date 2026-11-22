@@ -1,0 +1,21 @@
+services:
+  orders:
+    build: .
+    command: python -m orders.app
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 2s
+      retries: 15
+  traffic:
+    build: .
+    command: python -m tools.traffic
+    depends_on:
+      orders:
+        condition: service_healthy
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    command: ["--config.file=/etc/prometheus/prometheus.yml"]
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "127.0.0.1::9090"

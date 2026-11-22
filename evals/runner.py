@@ -21,6 +21,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
@@ -35,6 +36,7 @@ EVALS = Path(__file__).parent
 TASKS = EVALS / "tasks"
 RESULTS = EVALS / "results"
 GRADE_TIMEOUT = 120
+SERVICES_TIMEOUT = 600  # services-up.sh may build images and pull them the first time
 DEFAULT_CHECKS = Checks(commands=("python -m pytest -q",))
 
 
@@ -57,15 +59,20 @@ def tampered_tests(original: Path, work: Path, diff: dict[str, list[str]]) -> li
     ]
 
 
+def run_script(script: Path, work: Path, env: dict[str, str], timeout: float, check: bool = True) -> None:
+    proc = subprocess.run(
+        ["bash", str(script)], cwd=work, env=os.environ | env, check=False, capture_output=True, text=True,
+        timeout=timeout,
+    )  # fmt: skip
+    if check and proc.returncode != 0:
+        raise RuntimeError(f"{script.name} failed: {(proc.stdout + proc.stderr).strip()[-2000:]}")
+
+
 def setup_task(task_dir: Path, work: Path, remote: Path) -> None:
     """Copy the starting code; for git tasks, setup.sh then builds history and a bare `origin` at `remote`."""
     shutil.copytree(task_dir / "repo", work)
-    script = task_dir / "setup.sh"
-    if script.exists():
-        subprocess.run(
-            ["bash", str(script)], cwd=work, env=os.environ | {"EVAL_REMOTE": str(remote)},
-            check=True, capture_output=True, text=True, timeout=60,
-        )  # fmt: skip
+    if (task_dir / "setup.sh").exists():
+        run_script(task_dir / "setup.sh", work, {"EVAL_REMOTE": str(remote)}, timeout=60)
 
 
 def task_checks(task_dir: Path) -> Checks:
@@ -110,12 +117,27 @@ def run_task(
         ws = Workspace(work)
         before = ws.snapshot()
 
-        checks = task_checks(task_dir) if use_checks else None
-        mcp = task_dir / "mcp.json"  # e.g. a fake logs and metrics server for the task
-        result = run_agent(
-            (task_dir / "task.md").read_text(), ws, model, settings, log_path=log_path, checks=checks,
-            mcp_servers=load_mcp_config(mcp) if use_mcp and mcp.exists() else None,
-        )  # fmt: skip
+        # Tasks with services-up.sh run real services (e.g. Docker Compose) during the run.
+        # Each run gets its own id, so parallel runs and their MCP servers do not mix.
+        run_id = f"eval-{task_dir.name}-{uuid.uuid4().hex[:8]}"
+        up, down = task_dir / "services-up.sh", task_dir / "services-down.sh"
+        mcp = task_dir / "mcp.json"
+        servers = []
+        if use_mcp and mcp.exists():
+            servers = [
+                dataclasses.replace(s, variables={"EVAL_RUN_ID": run_id}) for s in load_mcp_config(mcp)
+            ]
+        try:
+            if up.exists() and servers:
+                run_script(up, work, {"EVAL_RUN_ID": run_id}, timeout=SERVICES_TIMEOUT)
+            checks = task_checks(task_dir) if use_checks else None
+            result = run_agent(
+                (task_dir / "task.md").read_text(), ws, model, settings, log_path=log_path, checks=checks,
+                mcp_servers=servers or None,
+            )  # fmt: skip
+        finally:
+            if down.exists():
+                run_script(down, work, {"EVAL_RUN_ID": run_id}, timeout=120, check=False)
         diff = changes(before, ws.snapshot())
 
         # The agent must not pass by removing tests: put those files back before grading.

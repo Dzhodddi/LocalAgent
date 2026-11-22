@@ -1,0 +1,9 @@
+{
+  "servers": {
+    "docker": {
+      "command": ["${PYTHON}", "${CONFIG_DIR}/../../mcp/docker_observability.py"],
+      "env": {"COMPOSE_PROJECT": "${EVAL_RUN_ID}"},
+      "tools": ["list_services", "service_logs", "prometheus_query"]
+    }
+  }
+}
