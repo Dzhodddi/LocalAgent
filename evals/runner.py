@@ -28,6 +28,7 @@ from localagents.agent import run_agent
 from localagents.checks import Checks
 from localagents.config import GIT_BACKENDS, THINK_CHOICES, Settings, parse_think
 from localagents.llm import ChatModel, OllamaModel, Usage
+from localagents.mcp_tools import load_mcp_config
 from localagents.workspace import Workspace, changes
 
 EVALS = Path(__file__).parent
@@ -96,7 +97,12 @@ def grade(work: Path, task_dir: Path, remote: Path | None = None) -> tuple[bool,
 
 
 def run_task(
-    task_dir: Path, model: ChatModel, settings: Settings, log_path: Path, use_checks: bool = True
+    task_dir: Path,
+    model: ChatModel,
+    settings: Settings,
+    log_path: Path,
+    use_checks: bool = True,
+    use_mcp: bool = True,
 ) -> dict:
     with tempfile.TemporaryDirectory(prefix=f"eval-{task_dir.name}-") as tmp:
         work, remote = Path(tmp) / "repo", Path(tmp) / "origin.git"
@@ -105,9 +111,11 @@ def run_task(
         before = ws.snapshot()
 
         checks = task_checks(task_dir) if use_checks else None
+        mcp = task_dir / "mcp.json"  # e.g. a fake logs and metrics server for the task
         result = run_agent(
-            (task_dir / "task.md").read_text(), ws, model, settings, log_path=log_path, checks=checks
-        )
+            (task_dir / "task.md").read_text(), ws, model, settings, log_path=log_path, checks=checks,
+            mcp_servers=load_mcp_config(mcp) if use_mcp and mcp.exists() else None,
+        )  # fmt: skip
         diff = changes(before, ws.snapshot())
 
         # The agent must not pass by removing tests: put those files back before grading.
@@ -135,11 +143,17 @@ def run_task(
 
 
 def run_one(
-    task_dir: Path, run: int, model: ChatModel, settings: Settings, out: Path, use_checks: bool = True
+    task_dir: Path,
+    run: int,
+    model: ChatModel,
+    settings: Settings,
+    out: Path,
+    use_checks: bool = True,
+    use_mcp: bool = True,
 ) -> dict:
     """run_task, but a crash becomes a failed row instead of stopping the whole eval."""
     try:
-        row = run_task(task_dir, model, settings, out / f"{task_dir.name}-{run}.jsonl", use_checks)
+        row = run_task(task_dir, model, settings, out / f"{task_dir.name}-{run}.jsonl", use_checks, use_mcp)
     except Exception as e:  # noqa: BLE001 - any crash is recorded as a failed run
         row = {"task": task_dir.name, "passed": False, "status": "crashed", "steps": 0, "tool_calls": 0,
                "tool_errors": 0, "seconds": 0.0, "usage": Usage().to_dict(), "summary": repr(e)}  # fmt: skip
@@ -214,6 +228,9 @@ def main() -> None:
     )  # fmt: skip
     parser.add_argument("--think", choices=THINK_CHOICES, help="Model reasoning before each reply.")
     parser.add_argument(
+        "--no-mcp", action="store_true", help="Do not start the tasks' MCP servers (mcp.json)."
+    )
+    parser.add_argument(
         "--no-context", action="store_true", help="Ignore AGENTS.md / CLAUDE.md in the tasks."
     )
     parser.add_argument(
@@ -245,6 +262,7 @@ def main() -> None:
     label += f"-git-{settings.git_backend}" if args.git_backend else ""
     label += "-no-checks" if args.no_checks else ""
     label += "-no-context" if args.no_context else ""
+    label += "-no-mcp" if args.no_mcp else ""
     out = RESULTS / f"{time.strftime('%Y%m%d-%H%M%S')}-{label}"
     out.mkdir(parents=True)
     work = [(task_dir, run) for task_dir in task_dirs for run in range(1, args.repeats + 1)]
@@ -257,7 +275,7 @@ def main() -> None:
     rows = []
     with ThreadPoolExecutor(max_workers=args.jobs) as pool:
         futures = [
-            pool.submit(run_one, task_dir, run, model, settings, out, not args.no_checks)
+            pool.submit(run_one, task_dir, run, model, settings, out, not args.no_checks, not args.no_mcp)
             for task_dir, run in work
         ]
         for future in as_completed(futures):
@@ -274,6 +292,7 @@ def main() -> None:
             {
                 "settings": dataclasses.asdict(settings),
                 "checks": not args.no_checks,
+                "mcp": not args.no_mcp,
                 "commit": code_version(),
                 "summary": summary,
                 "runs": rows,

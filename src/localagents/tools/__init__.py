@@ -51,7 +51,9 @@ class Tool:
             if value is None or (value == "" and name not in required):
                 del args[name]
             else:
-                args[name] = _coerce(self.name, name, value, props[name].get("type"))
+                args[name] = _coerce(
+                    self.name, name, value, props[name].get("type"), props[name].get("items")
+                )
 
         try:
             return self.func(**args)
@@ -59,7 +61,7 @@ class Tool:
             raise ToolError(str(e)) from e
 
 
-def _coerce(tool: str, name: str, value: Any, kind: str | None) -> Any:
+def _coerce(tool: str, name: str, value: Any, kind: str | None, items: dict | None = None) -> Any:
     """Fix the type slips models commonly make, e.g. "12" for an integer."""
     if kind == "integer":
         if isinstance(value, int) and not isinstance(value, bool):
@@ -67,6 +69,13 @@ def _coerce(tool: str, name: str, value: Any, kind: str | None) -> Any:
         if isinstance(value, str) and value.strip().lstrip("-").isdigit():
             return int(value)
         raise ToolError(f"{tool}: `{name}` must be an integer, got {value!r}.")
+    if kind == "number":
+        if isinstance(value, int | float) and not isinstance(value, bool):
+            return value
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            raise ToolError(f"{tool}: `{name}` must be a number, got {value!r}.") from None
     if kind == "string" and not isinstance(value, str):
         raise ToolError(f"{tool}: `{name}` must be a string, got {type(value).__name__}.")
     if kind == "boolean":
@@ -78,6 +87,10 @@ def _coerce(tool: str, name: str, value: Any, kind: str | None) -> Any:
     if kind == "array":
         if isinstance(value, str):  # a single path instead of a list
             value = [value]
+        if (items or {}).get("type", "string") != "string":  # lists of other things (MCP tools)
+            if not isinstance(value, list):
+                raise ToolError(f"{tool}: `{name}` must be a list, got {value!r}.")
+            return value
         if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
             raise ToolError(f"{tool}: `{name}` must be a list of strings, got {value!r}.")
     return value

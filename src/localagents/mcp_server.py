@@ -14,6 +14,7 @@ from localagents.agent import run_agent
 from localagents.checks import Checks
 from localagents.config import Settings
 from localagents.llm import OllamaModel
+from localagents.mcp_tools import default_mcp_servers
 from localagents.workspace import Workspace, changes
 
 server = MCPServer("localagents", instructions="Delegate small coding tasks to a local Ollama model.")
@@ -30,7 +31,11 @@ def _run(task: str, workdir: str, model: str | None, max_steps: int | None, chec
     settings = dataclasses.replace(Settings(), **overrides)
     ws = Workspace(root)
     before = ws.snapshot()
-    result = run_agent(task, ws, OllamaModel(settings), settings, checks=checks)
+    try:
+        servers = default_mcp_servers()
+    except ValueError as e:
+        return str(e)
+    result = run_agent(task, ws, OllamaModel(settings), settings, checks=checks, mcp_servers=servers)
     diff = changes(before, ws.snapshot())
 
     lines = [
@@ -59,7 +64,9 @@ async def run_local_agent(
 
     The agent can read, write and edit files, search, run sandboxed shell commands (no network)
     and use git in that folder only. It follows the folder's AGENTS.md (or CLAUDE.md), so put
-    project rules there once instead of repeating them in every task. Good for small,
+    project rules there once instead of repeating them in every task. If
+    ~/.config/localagents/mcp.json lists MCP servers (e.g. logs and metrics), it gets their
+    allowed tools too. Good for small,
     well-specified tasks: fix a bug with a failing test, implement a function, add a test.
     Give a complete task description.
 

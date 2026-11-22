@@ -3,6 +3,7 @@
 import json
 import time
 from collections.abc import Callable
+from contextlib import ExitStack
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
@@ -11,8 +12,9 @@ from localagents.checks import Checks, run_checks
 from localagents.config import Settings
 from localagents.context import FolderInstructions, project_instructions
 from localagents.llm import USAGE_KEY, ChatModel, Message, ModelError, Usage
+from localagents.mcp_tools import McpServerSpec, mcp_tools
 from localagents.prompts import SYSTEM_PROMPT
-from localagents.tools import ToolError, build_tools
+from localagents.tools import Tool, ToolError, build_tools
 from localagents.workspace import Workspace
 
 MAX_NUDGES = 3  # replies in a row without a tool call before giving up
@@ -89,11 +91,36 @@ def run_agent(
     log_path: Path | None = None,
     on_event: Callable[[Event], None] | None = None,
     checks: Checks | None = None,
+    mcp_servers: list[McpServerSpec] | None = None,
 ) -> AgentResult:
     """Solve `task` in `workspace`. Each step is appended to `log_path` as JSONL.
 
-    `checks` run when the model calls finish; finish is refused until they pass."""
+    `checks` run when the model calls finish; finish is refused until they pass.
+    `mcp_servers` add their allowed tools (e.g. logs and metrics) for this run."""
     tools = build_tools(workspace, settings)
+    with ExitStack() as stack:
+        try:
+            extra = mcp_tools(mcp_servers or [], settings, stack)
+        except ToolError as e:
+            return AgentResult("error", f"Could not start MCP servers: {e}", 0)
+        clash = sorted({t.name for t in extra} & set(tools))
+        if clash:
+            return AgentResult("error", f"MCP tools clash with built-in tools: {', '.join(clash)}.", 0)
+        finish = tools.pop("finish")  # keep finish last in the list the model sees
+        tools |= {t.name: t for t in extra} | {"finish": finish}
+        return _run_loop(task, workspace, model, settings, tools, log_path, on_event, checks)
+
+
+def _run_loop(
+    task: str,
+    workspace: Workspace,
+    model: ChatModel,
+    settings: Settings,
+    tools: dict[str, Tool],
+    log_path: Path | None,
+    on_event: Callable[[Event], None] | None,
+    checks: Checks | None,
+) -> AgentResult:
     schemas = [tool.schema() for tool in tools.values()]
     instructions = project_instructions(workspace) if settings.project_context else None
     folders = FolderInstructions(workspace) if settings.project_context else None

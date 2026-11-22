@@ -1,0 +1,15 @@
+{
+  "servers": {
+    "observability": {
+      "command": [
+        "${PYTHON}",
+        "${CONFIG_DIR}/observability_server.py"
+      ],
+      "tools": [
+        "list_services",
+        "query_logs",
+        "query_metrics"
+      ]
+    }
+  }
+}

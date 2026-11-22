@@ -9,6 +9,7 @@ from localagents.agent import Event, run_agent
 from localagents.checks import Checks
 from localagents.config import THINK_CHOICES, Settings, parse_think
 from localagents.llm import OllamaModel
+from localagents.mcp_tools import DEFAULT_CONFIG, default_mcp_servers, load_mcp_config
 from localagents.workspace import Workspace, changes
 
 
@@ -52,6 +53,17 @@ def cmd_run(args: argparse.Namespace) -> int:
         return 2
 
     settings = settings_from(args)
+    try:
+        servers = (
+            []
+            if args.no_mcp
+            else load_mcp_config(Path(args.mcp_config))
+            if args.mcp_config
+            else default_mcp_servers()
+        )
+    except ValueError as e:
+        print(e, file=sys.stderr)
+        return 2
     ws = Workspace(workdir)
     before = ws.snapshot()
     result = run_agent(
@@ -59,6 +71,7 @@ def cmd_run(args: argparse.Namespace) -> int:
         log_path=Path(args.log) if args.log else None,
         on_event=None if args.quiet else print_event,
         checks=Checks(tuple(args.check or ()), args.require_committed, args.require_pushed),
+        mcp_servers=servers,
     )  # fmt: skip
 
     diff = changes(before, ws.snapshot())
@@ -98,6 +111,11 @@ def main() -> None:
     run.add_argument("--require-pushed", action="store_true", help="Finish only once the branch is pushed.")
     run.add_argument("--log", help="Write the full trajectory to this JSONL file.")
     run.add_argument("--no-sandbox", action="store_true", help="Run commands without bubblewrap.")
+    run.add_argument(
+        "--mcp-config",
+        help=f"MCP servers whose tools the agent gets (logs, metrics). Default: {DEFAULT_CONFIG}.",
+    )
+    run.add_argument("--no-mcp", action="store_true", help="Start no MCP servers.")
     run.add_argument("--no-context", action="store_true", help="Ignore AGENTS.md / CLAUDE.md files.")
     run.add_argument("--quiet", action="store_true", help="Only print the result.")
 

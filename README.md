@@ -23,6 +23,8 @@ src/localagents/
                    (only offered when the workspace is a git repository)
     remote.py      git_push (pinned remote, no force, no main/master) and
                    create_pull_request (GitHub remotes, via gh)
+  mcp_client.py    Small stdio MCP client
+  mcp_tools.py     Tools from outside MCP servers (logs, metrics), read-only allowlist
   mcp_server.py    Exposes run_local_agent(task, workdir) to Claude Code
   cli.py           `localagents run "task" --workdir PATH`
 tests/             Unit tests; fakes.py has a scripted FakeModel (no Ollama needed)
@@ -34,6 +36,7 @@ evals/
     hidden_tests/  Grading tests, copied in only after the agent finishes
     setup.sh       Optional: git history and a bare `origin` remote for git tasks
     checks.json    Optional done checks; default: the visible tests must pass
+    mcp.json       Optional MCP servers for the task (e.g. fake logs and metrics)
   reports/         Written comparisons of eval runs
 scripts/
   bench_gpu.py     Ollama speed for different GPU layers / context / threads
@@ -57,6 +60,7 @@ uv run python evals/runner.py --model qwen3:8b --repeats 3 --task fix-pagination
 uv run python evals/runner.py --task 'git-*' --git-backend native   # git tasks use local bare remotes
 uv run python evals/runner.py --no-checks                 # let the agent finish without done checks
 uv run python evals/runner.py --task 'context-*' --repeats 5 --no-context   # A/B the project instructions
+uv run python evals/runner.py --task 'logs-*' --repeats 5 --no-mcp          # A/B the logs and metrics tools
 uv run python scripts/bench_gpu.py --num-gpu auto,20,24 --num-ctx 8192,16384
 ```
 
@@ -90,6 +94,31 @@ Write it for a small model: short, imperative, exact commands, no background rea
 - Every change gets a line in CHANGELOG.md under `## Unreleased`.
 - Never edit `migrations/` by hand.
 ```
+
+## Logs and metrics (MCP servers)
+
+The agent can use tools from MCP servers you list in `~/.config/localagents/mcp.json`
+(or `--mcp-config FILE`; `--no-mcp` turns them off). Only the tools you name reach the model,
+so list read-only ones and use a read-only token:
+
+```json
+{"servers": {"grafana": {
+  "command": ["mcp-grafana"],
+  "env": {"GRAFANA_URL": "http://localhost:3000", "GRAFANA_SERVICE_ACCOUNT_TOKEN": "${GRAFANA_TOKEN}"},
+  "tools": ["query_loki_logs", "query_prometheus"],
+  "descriptions": {"query_prometheus": "Run a PromQL query over a time range."}
+}}}
+```
+
+- The config is never read from the project the agent works in: a project file could start
+  any command on your machine.
+- `${VAR}` is filled in from your environment at start, so tokens stay out of the file.
+- Servers run outside the sandbox (they need the network) with only `PATH`, `HOME`, `LANG`
+  and the configured `env`.
+- JSON results are sent without indentation and cut at `max_output_chars`, with a hint to
+  narrow the query. Descriptions are cut at 400 characters; `descriptions` replaces them.
+- Check the tool names your server offers: if an allowed tool is missing, the run stops with
+  the list of tools the server has.
 
 ## How the agent copes with a small model
 
