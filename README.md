@@ -45,6 +45,8 @@ evals/
   reports/         Eval run reports and the stats page (evals/stats.py)
 docs/
   git-backends.md  Own git tools vs git MCP vs git CLI, measured
+  context-and-observability.md
+                   AGENTS.md context and logs/metrics MCP tools, measured
 scripts/
   bench_gpu.py     Ollama speed for different GPU layers / context / threads
 ```

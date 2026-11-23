@@ -31,6 +31,7 @@ class Run:
     checks: bool | None
     rows: list[dict]
     note: str = ""
+    mcp: bool | None = None  # False: the tasks' MCP servers were not started
 
     @property
     def passed(self) -> int:
@@ -54,6 +55,8 @@ class Run:
             parts.append(f"git {s['git_backend']}")
         if s.get("project_context") is False:
             parts.append("context off")
+        if self.mcp is False:
+            parts.append("MCP off")
         if self.checks is not None:
             parts.append("checks on" if self.checks else "checks off")
         return " · ".join(parts)
@@ -79,7 +82,7 @@ class Comparison:
 def load_run(folder: Path) -> Run:
     data = json.loads((folder / "results.json").read_text())
     started = datetime.strptime("-".join(folder.name.split("-")[:2]), "%Y%m%d-%H%M%S")
-    return Run(folder.name, started, data.get("settings", {}), data.get("checks"), data["runs"])
+    return Run(folder.name, started, data.get("settings", {}), data.get("checks"), data["runs"], mcp=data.get("mcp"))
 
 
 def wilson(k: int, n: int, z: float = Z95) -> tuple[float, float]:

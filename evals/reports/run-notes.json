@@ -11,15 +11,64 @@
     "20261109-233342-gpt-oss_20b-git-mcp": "Official git MCP server",
     "20261109-234159-gpt-oss_20b-git-shell": "git and gh through the shell",
     "20261110-213341-gpt-oss_20b": "13 tasks; 1 fail was a grader bug, fixed later",
-    "20261110-223741-gpt-oss_20b-no-checks": "13 tasks; 1 fail was a grader bug, fixed later"
+    "20261110-223741-gpt-oss_20b-no-checks": "13 tasks; 1 fail was a grader bug, fixed later",
+    "20261123-111307-gpt-oss_20b": "AGENTS.md rules: root and folder files on",
+    "20261123-113033-gpt-oss_20b-no-context": "AGENTS.md rules: context files off",
+    "20261123-114817-gpt-oss_20b": "Fake logs/metrics MCP server on",
+    "20261123-115756-gpt-oss_20b-no-mcp": "Fake logs/metrics MCP server off",
+    "20261123-120914-gpt-oss_20b": "Docker Compose + Prometheus, MCP on; model never called the tools",
+    "20261123-121902-gpt-oss_20b-no-mcp": "Docker Compose + Prometheus, MCP off"
   },
   "comparisons": [
-    ["20261109-201916-gpt-oss_20b", "20261109-211027-gpt-oss_20b", "diff and removal warning in edit_file"],
-    ["20261109-211027-gpt-oss_20b", "20261109-221923-qwen3_8b-think-off", "gpt-oss:20b vs qwen3:8b"],
-    ["20261109-232514-gpt-oss_20b-git-native", "20261109-233342-gpt-oss_20b-git-mcp", "git backend: own tools vs MCP"],
-    ["20261109-233342-gpt-oss_20b-git-mcp", "20261109-234159-gpt-oss_20b-git-shell", "git backend: MCP vs shell"],
-    ["20261109-232514-gpt-oss_20b-git-native", "20261109-234159-gpt-oss_20b-git-shell", "git backend: own tools vs shell"],
-    ["20261110-213341-gpt-oss_20b", "20261110-223741-gpt-oss_20b-no-checks", "done checks on vs off"],
-    ["20261108-234147-gpt-oss_20b", "20261108-235037-gpt-oss_20b", "1 job vs 5 parallel jobs"]
+    [
+      "20261109-201916-gpt-oss_20b",
+      "20261109-211027-gpt-oss_20b",
+      "diff and removal warning in edit_file"
+    ],
+    [
+      "20261109-211027-gpt-oss_20b",
+      "20261109-221923-qwen3_8b-think-off",
+      "gpt-oss:20b vs qwen3:8b"
+    ],
+    [
+      "20261109-232514-gpt-oss_20b-git-native",
+      "20261109-233342-gpt-oss_20b-git-mcp",
+      "git backend: own tools vs MCP"
+    ],
+    [
+      "20261109-233342-gpt-oss_20b-git-mcp",
+      "20261109-234159-gpt-oss_20b-git-shell",
+      "git backend: MCP vs shell"
+    ],
+    [
+      "20261109-232514-gpt-oss_20b-git-native",
+      "20261109-234159-gpt-oss_20b-git-shell",
+      "git backend: own tools vs shell"
+    ],
+    [
+      "20261110-213341-gpt-oss_20b",
+      "20261110-223741-gpt-oss_20b-no-checks",
+      "done checks on vs off"
+    ],
+    [
+      "20261108-234147-gpt-oss_20b",
+      "20261108-235037-gpt-oss_20b",
+      "1 job vs 5 parallel jobs"
+    ],
+    [
+      "20261123-111307-gpt-oss_20b",
+      "20261123-113033-gpt-oss_20b-no-context",
+      "AGENTS.md context on vs off"
+    ],
+    [
+      "20261123-114817-gpt-oss_20b",
+      "20261123-115756-gpt-oss_20b-no-mcp",
+      "logs/metrics MCP on vs off"
+    ],
+    [
+      "20261123-120914-gpt-oss_20b",
+      "20261123-121902-gpt-oss_20b-no-mcp",
+      "Docker logs/metrics MCP on vs off"
+    ]
   ]
 }
